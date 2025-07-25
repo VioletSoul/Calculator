@@ -146,7 +146,6 @@ class SciCalc(tk.Tk):
                 self.last_arg = expr[:-1]
             expr = expr + str(self.last_arg)
         else:
-            # При вычислении сохраняем последние оп и аргумент
             m = re.search(r'([\+\-\×\÷\^])([^\+\-\×\÷\^]*)$', expr)
             if m:
                 self.last_op = m.group(1)
@@ -157,13 +156,17 @@ class SciCalc(tk.Tk):
         try:
             expr_eval = expr.replace("π", "math.pi").replace("e", "math.e") \
                 .replace("ϕ", "(1+math.sqrt(5))/2") \
-                .replace("γ(", "math.gamma(") \
-                .replace("c", "299792458") \
-                .replace("∞", "float('inf')") \
+                .replace("γ(", "math.gamma(")
+            # Исправленная строка — только отдельная "c" заменяется на скорость света
+            expr_eval = re.sub(r'\bc\b', '299792458', expr_eval)
+            expr_eval = expr_eval.replace("∞", "float('inf')") \
                 .replace("^", "**").replace("÷", "/").replace("×", "*").replace(",", ".")
             expr_eval = smart_replace_functions(expr_eval)
             expr_eval = replace_factorials(expr_eval)
             expr_eval = insert_mult(expr_eval)
+            # Автоматически добавлять закрывающие скобки, если их не хватает
+            while expr_eval.count('(') > expr_eval.count(')'):
+                expr_eval += ')'
             if expr_eval.count('(') != expr_eval.count(')'):
                 raise ValueError("Проблема со скобками")
             env = {
