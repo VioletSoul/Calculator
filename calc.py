@@ -76,7 +76,7 @@ def smart_replace_functions(expr):
         'exp': 'math.exp({})', 'expm1': 'math.expm1({})'
     }
     for f in sorted(pairs, key=len, reverse=True):
-        expr = re.sub(rf'{f}\(([^\)]*)\)', pairs[f].replace('{}',r'\1'), expr)
+        expr = re.sub(rf'{f}\(([^\)]*)\)', pairs[f].replace('{}', r'\1'), expr)
     return expr
 
 def create_styled_button(parent, text, cmd, bg, fg, row, col, block='num'):
@@ -98,8 +98,8 @@ class SciCalc(tk.Tk):
         self.configure(bg=BG_MAIN)
         self.expression = ""
         self.result = ""
-        self.last_arg = ""
-        self.last_op = ""
+        self.last_op = None
+        self.last_arg = None
         self.display_var = tk.StringVar()
         self.create_widgets()
         self.resizable(False, False)
@@ -107,8 +107,8 @@ class SciCalc(tk.Tk):
     def clear(self):
         self.expression = ""
         self.result = ""
-        self.last_arg = ""
-        self.last_op = ""
+        self.last_op = None
+        self.last_arg = None
         self.display_var.set("")
         dbg("Очистка")
 
@@ -116,87 +116,79 @@ class SciCalc(tk.Tk):
         if self.expression:
             self.expression = self.expression[:-1]
             self.display_var.set(self.expression)
-            dbg("Backspace, expression:", self.expression)
+            dbg("Backspace, выражение:", self.expression)
 
     def add(self, val):
-        if not self.expression or self.display_var.get() == "Ошибка":
-            if val in ['+', '-', '×', '÷', '^']:
-                if self.result:
-                    self.expression = self.result + val
-            else:
-                self.expression = val
+        is_operator = val in ['+', '-', '×', '÷', '^']
+        if self.display_var.get() == "Ошибка":
+            self.expression = ""
+        if not self.expression and self.result and is_operator:
+            self.expression = self.result + val
+        elif not self.expression:
+            self.expression = val
         else:
-            if val in ['+', '-', '×', '÷', '^']:
-                if self.expression[-1] in ['+', '-', '×', '÷', '^']:
-                    self.expression = self.expression[:-1] + val
-                else:
-                    self.expression += val
+            if is_operator and self.expression[-1] in ['+', '-', '×', '÷', '^']:
+                self.expression = self.expression[:-1] + val
             else:
                 self.expression += val
         self.display_var.set(self.expression)
-        dbg("Ввод:", val, "Выражение:", self.expression)
+        dbg("Ввод:", val, "Выражение:", self.expression, "Результат:", self.result, "Последний оп:", self.last_op, "Последний аргумент:", self.last_arg)
 
     def eval_expr(self):
         expr = self.expression
-        if not expr and not self.result:
+        if not expr and self.result and self.last_op and self.last_arg:
+            expr = self.result + self.last_op + self.last_arg
+        elif expr and expr[-1] in ['+', '-', '×', '÷', '^']:
+            self.last_op = expr[-1]
+            if self.result:
+                self.last_arg = self.result
+            else:
+                self.last_arg = expr[:-1]
+            expr = expr + str(self.last_arg)
+        else:
+            # При вычислении сохраняем последние оп и аргумент
+            m = re.search(r'([\+\-\×\÷\^])([^\+\-\×\÷\^]*)$', expr)
+            if m:
+                self.last_op = m.group(1)
+                self.last_arg = m.group(2)
+        if not expr:
             self.display_var.set("Введите выражение")
             return
         try:
-            last_op = None
-            for op in ['+', '-', '×', '÷', '^']:
-                if expr.endswith(op):
-                    last_op = op
-            if last_op:
-                if self.result:
-                    expr += self.result
-                else:
-                    parts = re.split('[' + re.escape('+-×÷^') + ']', expr)
-                    if len(parts) > 1 and parts[-1]:
-                        self.last_arg = parts[-1]
-                    else:
-                        self.last_arg = '0' if last_op in ['÷', '×'] else '0'
-                    expr += self.last_arg
-            dbg("Вычисляем:", expr)
-            expr = expr.replace("π", "math.pi").replace("e", "math.e") \
+            expr_eval = expr.replace("π", "math.pi").replace("e", "math.e") \
                 .replace("ϕ", "(1+math.sqrt(5))/2") \
                 .replace("γ(", "math.gamma(") \
                 .replace("c", "299792458") \
                 .replace("∞", "float('inf')") \
                 .replace("^", "**").replace("÷", "/").replace("×", "*").replace(",", ".")
-            expr = smart_replace_functions(expr)
-            expr = replace_factorials(expr)
-            expr = insert_mult(expr)
-            if expr.count('(') != expr.count(')'):
+            expr_eval = smart_replace_functions(expr_eval)
+            expr_eval = replace_factorials(expr_eval)
+            expr_eval = insert_mult(expr_eval)
+            if expr_eval.count('(') != expr_eval.count(')'):
                 raise ValueError("Проблема со скобками")
             env = {
                 'math': math, 'abs': abs, 'gamma': math.gamma, 'factorial_any': factorial_any,
                 'sign': sign, 'avg': avg, 'min': min, 'max': max, 'random': random.random
             }
-            result = eval(expr, env)
+            dbg("Вычисляем:", expr_eval)
+            result = eval(expr_eval, env)
             dbg("Результат:", result)
-            self.display_var.set(f"{expr.replace('**', '^').replace('/', '÷').replace('*', '×')}={result}")
             self.result = str(result)
+            self.display_var.set(f"{expr.replace('**','^').replace('/','÷').replace('*','×')}={self.result}")
             self.expression = ""
-            self.last_arg = re.sub(r'.*[+×÷^×/-]', '', expr) if re.search(r'[+×÷^×/-]', expr) else str(result)
-            self.last_op = last_op if last_op else ''
         except Exception as e:
             dbg("Ошибка вычисления:", e)
             traceback.print_exc(file=sys.stderr)
             self.display_var.set("Ошибка")
             self.expression = ""
             self.result = ""
-            self.last_arg = ""
-            self.last_op = ""
-
-    def repeat_operation(self):
-        if self.last_op and self.result:
-            self.add(self.last_op)
-            self.add(self.result)
+            self.last_op = None
+            self.last_arg = None
 
     def plusminus(self):
         if not self.expression: return
         if re.search(r'[+\-×÷^]$', self.expression): return
-        if not re.search(r'[0-9πeϕc∞.]$', self.expression): return
+        if not re.search(r'([0-9πeϕc∞.]+)$', self.expression): return
         expr = re.sub(r'([0-9πeϕc∞.]+)$', lambda m: str(-float(m.group(1))), self.expression, 1)
         self.expression = expr
         self.display_var.set(self.expression)
