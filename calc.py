@@ -3,6 +3,7 @@ import math
 import re
 import sys
 import traceback
+import random
 
 BG_MAIN      = "#23252b"
 BG_ENTRY     = "#181921"
@@ -34,7 +35,7 @@ def factorial_any(n):
     try:
         if isinstance(n, int) or (isinstance(n, float) and n.is_integer()):
             if n < 0:
-                return math.gamma(n+1)  # гамма-функция работает и для отрицательных (за исключением "особых" значений)
+                return math.gamma(n+1)
             else:
                 return math.factorial(int(n))
         else:
@@ -42,31 +43,53 @@ def factorial_any(n):
     except Exception as e:
         return float('nan')
 
+def sign(x): return 1 if x > 0 else -1 if x < 0 else 0
+def avg(*args): return sum(args)/len(args) if args else 0
+
 def replace_factorials(expr):
-    """
-    Заменяет выражения типа 3.5! или -2.2! или 7! на 'factorial_any(<n>)'
-    """
     def repl(m):
         num = m.group(1)
-        if num.startswith("+"):
-            num = num[1:]
+        if num.startswith("+"): num = num[1:]
         return f"factorial_any({num})"
-    # Число может быть отрицательным или дробным, ищем перед ! только если оно не часть слова/идентификатора
-    # Например, -2.5!, +7!, 11!
     return re.sub(r'([+-]?\d*\.?\d+)!', repl, expr)
+
+def insert_mult(expr):
+    expr = re.sub(r'(\d|\)|!)(?=[a-zA-Z\(])', r'\1*', expr)
+    expr = re.sub(r'(\))(\()', r'\1*\2', expr)
+    return expr
+
+def smart_replace_functions(expr):
+    expr = re.sub(r'√\(([^\)]*)\)', r'math.sqrt(\1)', expr)
+    expr = re.sub(r'∛\(([^\)]*)\)', r'math.pow(\1,1/3)', expr)
+    pairs = {
+        'sin': 'math.sin(math.radians({}))',   'cos': 'math.cos(math.radians({}))',
+        'tan': 'math.tan(math.radians({}))',   'cot': '1/math.tan(math.radians({}))',
+        'sec': '1/math.cos(math.radians({}))', 'csc': '1/math.sin(math.radians({}))',
+        'arcsin': 'math.degrees(math.asin({}))', 'arccos': 'math.degrees(math.acos({}))',
+        'arctan': 'math.degrees(math.atan({}))',
+        'sinh': 'math.sinh({})', 'cosh': 'math.cosh({})', 'tanh': 'math.tanh({})',
+        'arcsinh': 'math.asinh({})', 'arccosh': 'math.acosh({})', 'arctanh':'math.atanh({})',
+        'log': 'math.log({})', 'log₁₀': 'math.log10({})', 'log₂': 'math.log2({})',
+        'ln1p': 'math.log1p({})',
+        'min':'min({})','max':'max({})','avg':'avg({})','abs':'abs({})',
+        'sign':'sign({})','deg':'math.degrees({})','rad':'math.radians({})','γ': 'math.gamma({})',
+        'exp':'math.exp({})','expm1':'math.expm1({})'
+    }
+    # длинные названия сначала!
+    for f in sorted(pairs, key=len, reverse=True):
+        expr = re.sub(rf'{f}\(([^\)]*)\)', pairs[f].replace('{}',r'\1'), expr)
+    return expr
 
 def create_styled_button(parent, text, cmd, bg, fg, row, col, block='num'):
     border = BORDER_COLORS.get(block, '#62636b')
     color_top = "#35383f" if block == "num" else "#345058" if block == "fn" else "#46404b" if block == "op" else "#5f626b"
-    if block == "eq":
-        color_top = "#506040"
+    if block == "eq": color_top = "#506040"
     btn = tk.Canvas(parent, width=74, height=54, highlightthickness=0, bd=0, bg=parent['bg'])
     btn.create_rectangle(2, 2, 72, 52, outline=border, width=3, fill=color_top)
     btn.create_rectangle(6, 28, 68, 52, outline='', fill=bg)
     btn.create_text(37, 32, text=text, font=FONT, fill=fg)
     btn.grid(row=row, column=col, padx=6, pady=8, sticky="nsew")
-    btn.bind("<Button-1>", lambda event: (dbg(f"Нажата кнопка '{text}'"), cmd()))
-    btn.bind("<ButtonRelease-1>", lambda event: dbg(f"Отпущена кнопка '{text}'"))
+    btn.bind("<Button-1>", lambda event: cmd())
     return btn
 
 class SciCalc(tk.Tk):
@@ -74,123 +97,114 @@ class SciCalc(tk.Tk):
         super().__init__()
         self.title("ScienceCalc")
         self.configure(bg=BG_MAIN)
-        self.geometry("470x610")
-        self.resizable(False, False)
         self.expression = ""
-        dbg("Приложение инициализировано")
         self.create_widgets()
+        self.resizable(False, False)
 
     def add(self, val):
-        dbg(f"Добавление в выражение: {val} (до: '{self.expression}')")
         self.expression += str(val)
         self.display_var.set(self.expression)
-        dbg(f"Текущее выражение: '{self.expression}'")
 
     def clear(self):
-        dbg("Сброс выражения")
         self.expression = ""
         self.display_var.set("")
 
     def backspace(self):
-        dbg(f"Backspace (до: '{self.expression}')")
         self.expression = self.expression[:-1]
         self.display_var.set(self.expression)
-        dbg(f"Текущее выражение: '{self.expression}'")
 
     def eval_expr(self):
-        dbg("Вычисление выражения:", self.expression)
         try:
             expr = self.expression \
-                .replace("π", "math.pi") \
-                .replace("÷", "/") \
-                .replace("×", "*") \
-                .replace("^", "**") \
-                .replace("√(", "math.sqrt(") \
-                .replace(",", ".") \
-                .replace("sin(", "math.sin(math.radians(") \
-                .replace("cos(", "math.cos(math.radians(") \
-                .replace("tan(", "math.tan(math.radians(") \
-                .replace("log10(", "math.log10(") \
-                .replace("log(", "math.log(") \
-                .replace("ln(", "math.log(") \
-                .replace("abs(", "abs(")
-            dbg("Преобразованное выражение:", expr)
+                .replace("π", "math.pi").replace("e", "math.e") \
+                .replace("ϕ", "(1+math.sqrt(5))/2") \
+                .replace("γ(", "math.gamma(") \
+                .replace("c", "299792458") \
+                .replace("∞", "float('inf')") \
+                .replace("^", "**").replace("÷", "/").replace("×", "*").replace(",",".")
+            expr = smart_replace_functions(expr)
             expr = replace_factorials(expr)
-            dbg("Выражение после проверки факториалов:", expr)
-            if expr.count('(') != expr.count(')'):
-                raise ValueError("Ошибка: проверьте закрытие скобок")
-            # eval с доступом к gamma, factorial_any и math
-            env = {'math': math, 'abs': abs, 'gamma': math.gamma, 'factorial_any': factorial_any}
+            expr = insert_mult(expr)
+            if expr.count('(') != expr.count(')'): raise ValueError("Проблема со скобками")
+            env = {
+                'math': math, 'abs': abs, 'gamma': math.gamma, 'factorial_any': factorial_any,
+                'sign': sign, 'avg': avg, 'min': min, 'max': max, 'random': random.random
+            }
             result = eval(expr, env)
-            dbg(f"Результат вычисления: {result}")
             self.display_var.set(result)
             self.expression = str(result)
         except Exception:
-            tb = traceback.format_exc()
-            dbg(f"Ошибка вычисления!\n{tb}")
             self.display_var.set("Ошибка")
             self.expression = ""
 
     def plusminus(self):
-        dbg("Смена знака (до:", self.expression, ")")
-        if self.expression.startswith('-'):
-            self.expression = self.expression[1:]
-        elif self.expression != "":
-            self.expression = '-' + self.expression
+        if self.expression.startswith('-'): self.expression = self.expression[1:]
+        elif self.expression: self.expression = '-' + self.expression
         self.display_var.set(self.expression)
-        dbg("Текущее выражение:", self.expression)
 
     def create_widgets(self):
         frame = tk.Frame(self, bg=BG_MAIN)
-        frame.place(x=0, y=0, width=470, height=610)
+        frame.pack(expand=True, fill="both")
         self.display_var = tk.StringVar()
         entry = tk.Entry(frame, textvariable=self.display_var, font=("Consolas", 23, "bold"),
-                         bg=BG_ENTRY, fg=FG_ENTRY, insertbackground=FG_ENTRY,
-                         relief="flat", bd=3, justify="right")
-        entry.grid(row=0, column=0, columnspan=5, sticky="nsew", padx=16, pady=15, ipady=14)
-        for i in range(5):
-            frame.grid_columnconfigure(i, minsize=90, weight=1)
-        for i in range(7):
-            frame.grid_rowconfigure(i, minsize=52, weight=1)
-        create_styled_button(frame, "C", self.clear, BTN_CTRL_BG, BTN_CTRL_FG, 1, 0, "ctrl")
-        create_styled_button(frame, "⌫", self.backspace, BTN_CTRL_BG, BTN_CTRL_FG, 1, 1, "ctrl")
-        create_styled_button(frame, "(", lambda: self.add("("), BTN_CTRL_BG, BTN_CTRL_FG, 1, 2, "ctrl")
-        create_styled_button(frame, ")", lambda: self.add(")"), BTN_CTRL_BG, BTN_CTRL_FG, 1, 3, "ctrl")
-        create_styled_button(frame, "π", lambda: self.add("π"), BTN_FN_BG, BTN_FN_FG, 1, 4, "fn")
-        create_styled_button(frame, "sin(", lambda: self.add("sin("), BTN_FN_BG, BTN_FN_FG, 2, 0, "fn")
-        create_styled_button(frame, "cos(", lambda: self.add("cos("), BTN_FN_BG, BTN_FN_FG, 2, 1, "fn")
-        create_styled_button(frame, "tan(", lambda: self.add("tan("), BTN_FN_BG, BTN_FN_FG, 2, 2, "fn")
-        create_styled_button(frame, "log(", lambda: self.add("log("), BTN_FN_BG, BTN_FN_FG, 2, 3, "fn")
-        create_styled_button(frame, "ln(", lambda: self.add("ln("), BTN_FN_BG, BTN_FN_FG, 2, 4, "fn")
-        buttons = [
-            ("7", 3, 0, BTN_NUM_BG, BTN_NUM_FG, "num"), ("8", 3, 1, BTN_NUM_BG, BTN_NUM_FG, "num"),
-            ("9", 3, 2, BTN_NUM_BG, BTN_NUM_FG, "num"), ("÷", 3, 3, BTN_OP_BG, BTN_OP_FG, "op"),
-            ("^", 3, 4, BTN_OP_BG, BTN_OP_FG, "op"),
-            ("4", 4, 0, BTN_NUM_BG, BTN_NUM_FG, "num"), ("5", 4, 1, BTN_NUM_BG, BTN_NUM_FG, "num"),
-            ("6", 4, 2, BTN_NUM_BG, BTN_NUM_FG, "num"), ("×", 4, 3, BTN_OP_BG, BTN_OP_FG, "op"),
-            ("√(", 4, 4, BTN_FN_BG, BTN_FN_FG, "fn"),
-            ("1", 5, 0, BTN_NUM_BG, BTN_NUM_FG, "num"), ("2", 5, 1, BTN_NUM_BG, BTN_NUM_FG, "num"),
-            ("3", 5, 2, BTN_NUM_BG, BTN_NUM_FG, "num"), ("-", 5, 3, BTN_OP_BG, BTN_OP_FG, "op"),
-            ("!", 5, 4, BTN_FN_BG, BTN_FN_FG, "fn"),
-            ("0", 6, 0, BTN_NUM_BG, BTN_NUM_FG, "num"), (".", 6, 1, BTN_NUM_BG, BTN_NUM_FG, "num"),
-            ("±", 6, 2, BTN_CTRL_BG, BTN_CTRL_FG, "ctrl"), ("+", 6, 3, BTN_OP_BG, BTN_OP_FG, "op"),
-            ("=", 6, 4, BTN_EQ_BG, BTN_EQ_FG, "eq"),
+                         bg=BG_ENTRY, fg=FG_ENTRY, insertbackground=FG_ENTRY, relief="flat", bd=3, justify="right")
+        entry.grid(row=0, column=0, columnspan=8, sticky="nsew", padx=12, pady=12, ipady=8)
+
+        btns = [
+            # row, col, txt, block
+            (1, 0, "C", "ctrl"),   (1, 1, "⌫", "ctrl"),   (1, 2, "(", "ctrl"), (1, 3, ")", "ctrl"),
+            (1, 4, "π", "fn"),     (1, 5, "e", "fn"),     (1, 6, "ϕ", "fn"),  (1, 7, "±", "ctrl"),
+
+            (2, 0, "sin(", "fn"),  (2, 1, "cos(", "fn"),  (2, 2, "tan(", "fn"), (2, 3, "cot(", "fn"),
+            (2, 4, "sec(", "fn"),  (2, 5, "csc(", "fn"),  (2, 6, "abs(", "fn"), (2, 7, "sign(", "fn"),
+
+            (3, 0, "arcsin(", "fn"), (3, 1, "arccos(", "fn"), (3, 2, "arctan(", "fn"), (3, 3, "arcsinh(", "fn"),
+            (3, 4, "arccosh(", "fn"), (3, 5, "arctanh(", "fn"), (3, 6, "sinh(", "fn"), (3, 7, "cosh(", "fn"),
+
+            (4, 0, "tanh(", "fn"), (4, 1, "deg(", "fn"),  (4, 2, "rad(", "fn"), (4, 3, "exp(", "fn"),
+            (4, 4, "10^(", "fn"),  (4, 5, "2^(", "fn"),   (4, 6, "expm1(", "fn"), (4, 7, "ln1p(", "fn"),
+
+            (5, 0, "min(", "fn"),  (5, 1, "max(", "fn"),  (5, 2, "avg(", "fn"), (5, 3, "log(", "fn"),
+            (5, 4, "log₁₀(", "fn"), (5, 5, "log₂(", "fn"),(5, 6, "√(", "fn"),  (5, 7, "∛(", "fn"),
+
+            (6, 0, "7", "num"),    (6, 1, "8", "num"),    (6, 2, "9", "num"),   (6, 3, "÷", "op"),
+            (6, 4, "^", "op"),     (6, 5, "γ(", "fn"),    (6, 6, "c", "fn"),    (6, 7, "∞", "fn"),
+
+            (7, 0, "4", "num"),    (7, 1, "5", "num"),    (7, 2, "6", "num"),   (7, 3, "×", "op"),
+            (7, 4, "Rnd", "ctrl"), (7, 5, "", "num"),     (7, 6, "", "num"),    (7, 7, "", "num"),
+
+            (8, 0, "1", "num"),    (8, 1, "2", "num"),    (8, 2, "3", "num"),   (8, 3, "-", "op"),
+            (8, 4, "", "num"),     (8, 5, "", "num"),     (8, 6, "", "num"),    (8, 7, "", "num"),
+
+            (9, 0, "0", "num"),    (9, 1, ".", "num"),    (9, 2, "=", "eq"),    (9, 3, "+", "op"),
+            (9, 4, "!", "fn"),     (9, 5, "", "num"),     (9, 6, "", "num"),    (9, 7, "", "num"),
         ]
-        for bt in buttons:
-            text, row, col, bg, fg, block = bt
-            if text == "=":
-                cmd = self.eval_expr
-            elif text == "±":
-                cmd = self.plusminus
-            elif text == "√(":
-                cmd = lambda: self.add("√(")
-            elif text == "!":
-                cmd = lambda: self.add("!")
-            elif text in ("÷", "×", "-", "+", "^"):
-                cmd = lambda t=text: self.add(t)
+
+        for i in range(8):
+            frame.grid_columnconfigure(i, weight=1)
+        for i in range(10):
+            frame.grid_rowconfigure(i, weight=1)
+        for row, col, txt, block in btns:
+            if txt == "": continue
+            if txt == "=":
+                make = lambda t=txt: self.eval_expr()
+            elif txt == "C":
+                make = lambda t=txt: self.clear()
+            elif txt == "⌫":
+                make = lambda t=txt: self.backspace()
+            elif txt == "±":
+                make = lambda t=txt: self.plusminus()
+            elif txt == "Rnd":
+                make = lambda: self.add(str(round(random.random(), 5)))
             else:
-                cmd = lambda t=text: self.add(t)
-            create_styled_button(frame, text, cmd, bg, fg, row, col, block=block)
+                make = lambda t=txt: self.add(t)
+            bg, fg = BTN_NUM_BG, BTN_NUM_FG
+            if block == "fn": bg, fg = BTN_FN_BG, BTN_FN_FG
+            if block == "op": bg, fg = BTN_OP_BG, BTN_OP_FG
+            if block == "ctrl": bg, fg = BTN_CTRL_BG, BTN_CTRL_FG
+            if block == "eq": bg, fg = BTN_EQ_BG, BTN_EQ_FG
+            create_styled_button(frame, txt, make, bg, fg, row, col, block)
+
 if __name__ == "__main__":
     dbg("Запуск приложения")
     SciCalc().mainloop()
