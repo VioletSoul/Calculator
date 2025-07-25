@@ -30,14 +30,30 @@ BORDER_COLORS = {
 def dbg(*args):
     print("[DEBUG]", *args, file=sys.stderr)
 
-def factorial_safe(expr):
+def factorial_any(n):
+    try:
+        if isinstance(n, int) or (isinstance(n, float) and n.is_integer()):
+            if n < 0:
+                return math.gamma(n+1)  # гамма-функция работает и для отрицательных (за исключением "особых" значений)
+            else:
+                return math.factorial(int(n))
+        else:
+            return math.gamma(n+1)
+    except Exception as e:
+        return float('nan')
+
+def replace_factorials(expr):
+    """
+    Заменяет выражения типа 3.5! или -2.2! или 7! на 'factorial_any(<n>)'
+    """
     def repl(m):
         num = m.group(1)
-        if '.' in num or '-' in num:
-            raise ValueError("Факториал только для целых неотрицательных чисел")
-        return f"math.factorial({num})"
-    result = re.sub(r'(\d+)!', repl, expr)
-    return result
+        if num.startswith("+"):
+            num = num[1:]
+        return f"factorial_any({num})"
+    # Число может быть отрицательным или дробным, ищем перед ! только если оно не часть слова/идентификатора
+    # Например, -2.5!, +7!, 11!
+    return re.sub(r'([+-]?\d*\.?\d+)!', repl, expr)
 
 def create_styled_button(parent, text, cmd, bg, fg, row, col, block='num'):
     border = BORDER_COLORS.get(block, '#62636b')
@@ -99,9 +115,13 @@ class SciCalc(tk.Tk):
                 .replace("ln(", "math.log(") \
                 .replace("abs(", "abs(")
             dbg("Преобразованное выражение:", expr)
-            expr = factorial_safe(expr)
+            expr = replace_factorials(expr)
             dbg("Выражение после проверки факториалов:", expr)
-            result = eval(expr, {'math': math, 'abs': abs})
+            if expr.count('(') != expr.count(')'):
+                raise ValueError("Ошибка: проверьте закрытие скобок")
+            # eval с доступом к gamma, factorial_any и math
+            env = {'math': math, 'abs': abs, 'gamma': math.gamma, 'factorial_any': factorial_any}
+            result = eval(expr, env)
             dbg(f"Результат вычисления: {result}")
             self.display_var.set(result)
             self.expression = str(result)
