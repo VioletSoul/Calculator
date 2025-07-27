@@ -1,10 +1,14 @@
 # ScienceCalc
 
-![Python](https://img.shields.io/badge/Python-3776AB?style=flat&logo=python&logoColor=white)
-![Tkinter](https://img.shields.io/badge/Tkinter-3776AB?style=flat&logo=python&logoColor=white)
-![Math](https://img.shields.io/badge/Math%20Functions-✓-blue)
-![Scientific](https://img.shields.io/badge/Scientific%20Calculator-✓-green)
+![Python](https://img.shields.io/badge/Python-3.7%2B-blue?logo=python&logoColor=white)
+![Tkinter](https://img.shields.io/badge/Tkinter-%E2%9C%94%EF%B8%8F-3776AB?logo=python)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey)
+![Repo Size](https://img.shields.io/github/repo-size/VioletSoul/ScienceCalc)
+![Code Size](https://img.shields.io/github/languages/code-size/VioletSoul/ScienceCalc)
+![Stars](https://img.shields.io/github/stars/VioletSoul/ScienceCalc?style=social)
 ![License](https://img.shields.io/badge/License-MIT-blue)
+![Maintenance](https://img.shields.io/maintenance/yes/2025)
+![Status](https://img.shields.io/badge/status-active-brightgreen)
 
 **ScienceCalc** is a modern, user-friendly scientific calculator with a rich graphical interface built using Python and Tkinter. It provides a comprehensive suite of mathematical, trigonometric, algebraic, and special scientific functions, supporting advanced operations such as gamma and factorial, work with mathematical constants π, e, φ, c (speed of light), and much more.
 
