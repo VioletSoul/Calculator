@@ -8,7 +8,9 @@ import inspect
 
 BG_MAIN = "#23252b"
 BG_ENTRY = "#181921"
+BG_EXPR = "#29494d"        # Новый фон верхнего дисплея (темно-бирюзовый/лазурный)
 FG_ENTRY = "#ffdf80"
+FG_EXPR = "#7cfced"        # Ярко-голубой цвет текста выражения
 BTN_NUM_BG = "#2c3040"
 BTN_OP_BG = "#3c3541"
 BTN_FN_BG = "#234650"
@@ -21,6 +23,7 @@ BTN_CTRL_FG = "#dadada"
 BTN_EQ_FG = "#f4ffae"
 FONT = ("Segoe UI", 16, "bold")
 ENTRY_FONT = ("Consolas", 23, "bold")
+EXPR_FONT = ("Consolas", 14, "bold")
 
 BORDER_COLORS = {
     'num': '#444659', 'op': '#806d53', 'fn': '#357c6f',
@@ -195,16 +198,23 @@ class SciCalcGUI(tk.Tk):
         self.configure(bg=BG_MAIN)
         self.resizable(False, False)
         self.display_var = tk.StringVar()
+        self.expr_var = tk.StringVar()
+        self.last_calc = False
         self.create_widgets()
 
     def create_widgets(self):
         frame = tk.Frame(self, bg=BG_MAIN)
         frame.pack(expand=True, fill="both", padx=5, pady=5)
 
+        expr_disp = tk.Entry(frame, textvariable=self.expr_var, font=EXPR_FONT,
+                             bg=BG_EXPR, fg=FG_EXPR, insertbackground=FG_EXPR,
+                             relief="flat", bd=1, justify="right", state='readonly')
+        expr_disp.grid(row=0, column=0, columnspan=8, sticky="nsew", padx=5, pady=(12, 1), ipady=2)
+
         entry = tk.Entry(frame, textvariable=self.display_var, font=ENTRY_FONT,
                          bg=BG_ENTRY, fg=FG_ENTRY, insertbackground=FG_ENTRY,
                          relief="flat", bd=3, justify="right", state='readonly')
-        entry.grid(row=0, column=0, columnspan=8, sticky="nsew", padx=5, pady=10, ipady=10)
+        entry.grid(row=1, column=0, columnspan=8, sticky="nsew", padx=5, pady=(1, 10), ipady=10)
 
         button_layout = [
             [('C', 'ctrl'), ('⌫', 'ctrl'), ('(', 'op'), (')', 'op'), ('π', 'fn'), ('e', 'fn'), ('ϕ', 'fn'), ('±', 'ctrl')],
@@ -217,10 +227,10 @@ class SciCalcGUI(tk.Tk):
             [('0', 'num'), ('.', 'num'), ('=', 'eq'), ('+', 'op')]
         ]
 
-        grid_row = 1
+        grid_row = 2
         for row_items in button_layout:
             grid_col = 0
-            max_cols = 4 if grid_row >= 7 else 8
+            max_cols = 4 if grid_row >= 8 else 8
             for config in row_items:
                 if grid_col >= max_cols: continue
                 text, block = config[0], config[1]
@@ -254,12 +264,20 @@ class SciCalcGUI(tk.Tk):
     def add_text(self, value):
         if str(self.display_var.get()).startswith("Ошибка"):
             self.expression = ""
+            self.expr_var.set("")
+        if self.last_calc:
+            self.expression = ""
+            self.display_var.set("")
+            self.expr_var.set("")
+            self.last_calc = False
         self.expression += value
         self.display_var.set(self.expression)
 
     def clear(self):
         self.expression = ""
+        self.expr_var.set("")
         self.display_var.set("")
+        self.last_calc = False
 
     def backspace(self):
         if str(self.display_var.get()).startswith("Ошибка"):
@@ -279,16 +297,23 @@ class SciCalcGUI(tk.Tk):
     def evaluate_expression(self):
         if not self.expression: return
         try:
+            orig = self.expression
             result = self.logic.evaluate(self.expression)
             result_str = str(int(result)) if isinstance(result, float) and result.is_integer() else str(result)
+            self.expr_var.set(orig)
             self.display_var.set(result_str)
             self.expression = result_str
+            self.last_calc = True
         except (ValueError, SyntaxError) as e:
+            self.expr_var.set(self.expression)
             self.display_var.set(f"Ошибка: {e}")
             self.expression = ""
+            self.last_calc = False
         except Exception as e:
+            self.expr_var.set(self.expression)
             self.display_var.set("Неизвестная ошибка")
             self.expression = ""
+            self.last_calc = False
 
 if __name__ == "__main__":
     print("[DEBUG] Запуск приложения SciCalc...", file=sys.stderr)
