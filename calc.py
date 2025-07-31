@@ -4,10 +4,8 @@ import re
 from collections import deque
 import sys
 import random
+import inspect
 
-# --- Секция 1: Константы и стили ---
-
-# Цвета и шрифты для интерфейса
 BG_MAIN = "#23252b"
 BG_ENTRY = "#181921"
 FG_ENTRY = "#ffdf80"
@@ -24,7 +22,6 @@ BTN_EQ_FG = "#f4ffae"
 FONT = ("Segoe UI", 16, "bold")
 ENTRY_FONT = ("Consolas", 23, "bold")
 
-# Цвета для "3D" эффекта кнопок
 BORDER_COLORS = {
     'num': '#444659', 'op': '#806d53', 'fn': '#357c6f',
     'ctrl': '#828393', 'eq': '#7e9e51'
@@ -34,19 +31,12 @@ TOP_COLORS = {
     'ctrl': '#5f626b', 'eq': '#506040'
 }
 
-# --- Секция 2: Класс с логикой вычислений ---
-
 class CalculatorLogic:
-    """
-    Отвечает за всю математическую логику, парсинг и вычисления.
-    Не зависит от графического интерфейса.
-    """
     def __init__(self):
         self.ans = 0.0
         self._setup_environment()
 
     def _setup_environment(self):
-        """Определяем доступные функции, константы и операторы."""
         self.functions = {
             'sin': lambda x: math.sin(math.radians(x)),
             'cos': lambda x: math.cos(math.radians(x)),
@@ -99,7 +89,6 @@ class CalculatorLogic:
         except Exception as e:
             raise ValueError("Неизвестная ошибка") from e
 
-
     def _prepare_expression(self, expr: str) -> str:
         expr = expr.lower().strip()
         replacements = {
@@ -108,16 +97,11 @@ class CalculatorLogic:
         }
         for old, new in replacements.items():
             expr = expr.replace(old, new)
-
-        # Улучшенная и исправленная логика для факториала
         expr = re.sub(r'(\d+\.?\d*)!', r'fact(\1)', expr)
-
-        # Неявное умножение
         expr = re.sub(r'(\d|\))(\()', r'\1*\2', expr)
         expr = re.sub(r'(\))(\d)', r'\1*\2', expr)
         expr = re.sub(r'(\d)([a-z(])', r'\1*\2', expr)
         expr = re.sub(r'(!|\))([a-z(])', r'\1*\2', expr)
-
         return expr
 
     def _tokenize(self, expr: str) -> list:
@@ -177,13 +161,23 @@ class CalculatorLogic:
             elif token in self.operators:
                 arg2 = stack.pop()
                 arg1 = stack.pop()
-                # *** ИСПРАВЛЕННАЯ СТРОКА ***
                 stack.append(self.operators[token]['func'](arg1, arg2))
             elif token in self.functions:
                 func = self.functions[token]
-                arg_count = func.__code__.co_argcount
-                if func in (min, max, sum):
+                try:
+                    sig = inspect.signature(func)
+                    arg_count = 0
+                    for p in sig.parameters.values():
+                        if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) and p.default == inspect._empty:
+                            arg_count += 1
+                    if sig.parameters and any(p.kind == p.VAR_POSITIONAL for p in sig.parameters.values()):
+                        arg_count = len(stack)
+                except Exception:
+                    arg_count = 1
+                if func in (min, max):
                     arg_count = 2
+                if func == self.functions['avg']:
+                    arg_count = len(stack)
                 if len(stack) < arg_count:
                     raise SyntaxError(f"Недостаточно аргументов для функции {token}")
                 args = [stack.pop() for _ in range(arg_count)][::-1]
@@ -191,8 +185,6 @@ class CalculatorLogic:
         if len(stack) != 1:
             raise SyntaxError("Ошибка в выражении")
         return stack[0]
-
-# --- Секция 3: Класс GUI (без изменений) ---
 
 class SciCalcGUI(tk.Tk):
     def __init__(self):
@@ -218,7 +210,7 @@ class SciCalcGUI(tk.Tk):
             [('C', 'ctrl'), ('⌫', 'ctrl'), ('(', 'op'), (')', 'op'), ('π', 'fn'), ('e', 'fn'), ('ϕ', 'fn'), ('±', 'ctrl')],
             [('sin(', 'fn'), ('cos(', 'fn'), ('tan(', 'fn'), ('cot(', 'fn'), ('sec(', 'fn'), ('csc(', 'fn'), ('abs(', 'fn'), ('sign(', 'fn')],
             [('arcsin(', 'fn'), ('arccos(', 'fn'), ('arctan(', 'fn'), ('log(', 'fn'), ('log10(', 'fn'), ('log2(', 'fn'), ('sinh(', 'fn'), ('cosh(', 'fn')],
-            [('tanh(', 'fn'), ('deg(', 'fn'), ('rad(', 'fn'), ('exp(', 'fn'), ('sqrt(', 'fn'), ('cbrt(', 'fn'), ('!', 'fn'), ('gamma(', 'fn')],
+            [('tanh(', 'fn'), ('deg(', 'fn'), ('rad(', 'fn'), ('exp(', 'fn'), ('√(', 'fn'), ('∛(', 'fn'), ('!', 'fn'), ('gamma(', 'fn')],
             [('7', 'num'), ('8', 'num'), ('9', 'num'), ('÷', 'op'), ('^', 'op'), ('min(', 'fn'), ('max(', 'fn'), ('avg(', 'fn')],
             [('4', 'num'), ('5', 'num'), ('6', 'num'), ('×', 'op'), ('Rnd', 'ctrl'), (',', 'op'), ('inf', 'fn'), ('Ans', 'ctrl')],
             [('1', 'num'), ('2', 'num'), ('3', 'num'), ('-', 'op')],
@@ -244,6 +236,8 @@ class SciCalcGUI(tk.Tk):
         elif text == '±': cmd = self.toggle_sign
         elif text == 'Rnd': cmd = lambda: self.add_text(f"{random.random():.5f}")
         elif text == '=': cmd = self.evaluate_expression
+        elif text == '√(': cmd = lambda: self.add_text('√(')
+        elif text == '∛(': cmd = lambda: self.add_text('∛(')
         else: cmd = lambda t=text: self.add_text(t)
 
         canvas = tk.Canvas(parent, width=74, height=54, highlightthickness=0, bd=0, bg=parent['bg'])
@@ -295,8 +289,6 @@ class SciCalcGUI(tk.Tk):
         except Exception as e:
             self.display_var.set("Неизвестная ошибка")
             self.expression = ""
-
-# --- Секция 4: Запуск приложения ---
 
 if __name__ == "__main__":
     print("[DEBUG] Запуск приложения SciCalc...", file=sys.stderr)
