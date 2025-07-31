@@ -8,9 +8,9 @@ import inspect
 
 BG_MAIN = "#23252b"
 BG_ENTRY = "#181921"
-BG_EXPR = "#29494d"        # Новый фон верхнего дисплея (темно-бирюзовый/лазурный)
+BG_EXPR = "#29494d"
 FG_ENTRY = "#ffdf80"
-FG_EXPR = "#7cfced"        # Ярко-голубой цвет текста выражения
+FG_EXPR = "#7cfced"
 BTN_NUM_BG = "#2c3040"
 BTN_OP_BG = "#3c3541"
 BTN_FN_BG = "#234650"
@@ -100,7 +100,7 @@ class CalculatorLogic:
         }
         for old, new in replacements.items():
             expr = expr.replace(old, new)
-        expr = re.sub(r'(\d+\.?\d*)!', r'fact(\1)', expr)
+        expr = re.sub(r'(\d+\.?\d*|\bpi\b|\be\b|\bphi\b|\([^\(\)]+\))!', r'fact(\1)', expr)
         expr = re.sub(r'(\d|\))(\()', r'\1*\2', expr)
         expr = re.sub(r'(\))(\d)', r'\1*\2', expr)
         expr = re.sub(r'(\d)([a-z(])', r'\1*\2', expr)
