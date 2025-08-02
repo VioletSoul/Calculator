@@ -1,49 +1,56 @@
-# Импорт библиотек
-import tkinter as tk              # GUI для калькулятора
-import math                       # Математические функции и константы
-import re                         # Регулярные выражения для анализа строк
-from collections import deque     # Очередь для обратной польской нотации (RPN)
-import sys                        # Для вывода сообщений и отладки
-import random                     # Генерация случайных чисел
-import inspect                    # Для анализа функций (сколько аргументов требуется)
+import tkinter as tk
+import math
+import re
+from collections import deque
+import sys
+import random
+import inspect
 
-# Цветовая схема интерфейса (основные цвета и цвета кнопок)
-BG_MAIN = "#23252b"
-BG_ENTRY = "#181921"
-BG_EXPR = "#29494d"
-FG_ENTRY = "#ffdf80"
-FG_EXPR = "#7cfced"
-BTN_NUM_BG = "#2c3040"
-BTN_OP_BG = "#3c3541"
-BTN_FN_BG = "#234650"
-BTN_CTRL_BG = "#51545f"
-BTN_EQ_BG = "#444d2a"
-BTN_NUM_FG = "#ece7ff"
-BTN_OP_FG = "#ff8323"
-BTN_FN_FG = "#5ed1a7"
+# ===============================
+# Цвета и шрифты интерфейса
+# ===============================
+BG_MAIN   = "#23252b"    # Цвет фона основного окна
+BG_ENTRY  = "#181921"    # Цвет фона поля результата
+BG_EXPR   = "#29494d"    # Цвет верхней строки с выражением
+
+FG_ENTRY  = "#ffdf80"    # Цвет текста результата
+FG_EXPR   = "#7cfced"    # Цвет текста строки выражения
+
+BTN_NUM_BG  = "#2c3040"  # Цвет обычных кнопок-цифр
+BTN_OP_BG   = "#3c3541"  # Цвет кнопок-операций
+BTN_FN_BG   = "#234650"  # Цвет кнопок-функций
+BTN_CTRL_BG = "#51545f"  # Цвет кнопок служебных (C, ⌫, ±, Rnd, Ans)
+BTN_EQ_BG   = "#444d2a"  # Цвет кнопки "="
+
+BTN_NUM_FG  = "#ece7ff"
+BTN_OP_FG   = "#ff8323"
+BTN_FN_FG   = "#5ed1a7"
 BTN_CTRL_FG = "#dadada"
-BTN_EQ_FG = "#f4ffae"
-FONT = ("Segoe UI", 16, "bold")
-ENTRY_FONT = ("Consolas", 23, "bold")
-EXPR_FONT = ("Consolas", 14, "bold")
+BTN_EQ_FG   = "#f4ffae"
 
-BORDER_COLORS = {
+FONT        = ("Segoe UI", 16, "bold")     # Универсальный шрифт для кнопок
+ENTRY_FONT  = ("Consolas", 23, "bold")     # Для главного поля результата
+EXPR_FONT   = ("Consolas", 14, "bold")     # Для строки выражения
+
+BORDER_COLORS = {   # Цвета рамок для разных блоков кнопок
     'num': '#444659', 'op': '#806d53', 'fn': '#357c6f',
     'ctrl': '#828393', 'eq': '#7e9e51'
 }
-TOP_COLORS = {
+TOP_COLORS = {      # Градиентная верхушка для кнопок
     'num': '#35383f', 'op': '#46404b', 'fn': '#345058',
     'ctrl': '#5f626b', 'eq': '#506040'
 }
 
-# Логика научного калькулятора. Выделена в отдельный класс.
+# ===============================
+# Класс: логика вычислений
+# ===============================
 class CalculatorLogic:
     def __init__(self):
-        self.ans = 0.0
-        self._setup_environment()  # Подготовим функции, операторы и константы
+        self.ans = 0.0    # Последнее вычисленное значение для Ans
+        self._setup_environment()  # Конфигурируем функции, операторы и константы
 
     def _setup_environment(self):
-        # Все поддерживаемые функции калькулятора
+        # Словарь доступных функций; ключ — имя, значение — callable
         self.functions = {
             'sin': lambda x: math.sin(math.radians(x)),
             'cos': lambda x: math.cos(math.radians(x)),
@@ -54,83 +61,79 @@ class CalculatorLogic:
             'arcsin': lambda x: math.degrees(math.asin(x)),
             'arccos': lambda x: math.degrees(math.acos(x)),
             'arctan': lambda x: math.degrees(math.atan(x)),
-            'sinh': math.sinh, 'cosh': math.cosh, 'tanh': math.tanh,
+            'sinh': math.sinh,    'cosh': math.cosh,    'tanh': math.tanh,
             'arcsinh': math.asinh, 'arccosh': math.acosh, 'arctanh': math.atanh,
-            'log': math.log, 'log10': math.log10, 'log2': math.log2,
-            'ln': math.log, 'exp': math.exp, 'expm1': math.expm1, 'ln1p': math.log1p,
-            'sqrt': math.sqrt, 'cbrt': lambda x: math.pow(x, 1/3),
-            'abs': abs, 'fact': lambda n: math.gamma(n + 1),
+            'log': math.log,      'log10': math.log10,  'log2': math.log2,
+            'ln': math.log,       'exp': math.exp,      'expm1': math.expm1, 'ln1p': math.log1p,
+            'sqrt': math.sqrt,    'cbrt': lambda x: math.pow(x, 1/3),
+            'abs': abs,           'fact': lambda n: math.gamma(n + 1),  # факториал для float и больших n
             'gamma': math.gamma,
             'sign': lambda x: 1 if x > 0 else -1 if x < 0 else 0,
-            'min': min, 'max': max,
+            'min': min,           'max': max,
             'avg': lambda *args: sum(args) / len(args) if args else 0,
-            'deg': math.degrees, 'rad': math.radians,
-            'random': random.random,
+            'deg': math.degrees,  'rad': math.radians,
+            'random': random.random  # генератор случайного float
         }
-        # Известные константы
+        # Предопределённые константы
         self.constants = {
-            'pi': math.pi,
-            'e': math.e,
+            'pi': math.pi,   'e': math.e,
             'phi': (1 + math.sqrt(5)) / 2,
             'inf': float('inf')
         }
-        # Поддерживаемые операторы
+        # Словарь операторов: приоритет и соответствующая реализация
         self.operators = {
             '+': {'prec': 1, 'assoc': 'L', 'func': lambda a, b: a + b},
             '-': {'prec': 1, 'assoc': 'L', 'func': lambda a, b: a - b},
             '*': {'prec': 2, 'assoc': 'L', 'func': lambda a, b: a * b},
             '/': {'prec': 2, 'assoc': 'L', 'func': lambda a, b: a / b},
-            '^': {'prec': 3, 'assoc': 'R', 'func': lambda a, b: a ** b},
+            '^': {'prec': 3, 'assoc': 'R', 'func': lambda a, b: a ** b}
         }
 
-    # Главная функция вычисления строки-выражения
-    def evaluate(self, expression_str: str):
+    def evaluate(self, expr_str: str):
+        """Вычисляет строку выражения, возвращает результат как float"""
         try:
-            clean_expr = self._prepare_expression(expression_str)  # Подготовка (замены, подстановка ans и т.д.)
-            tokens = self._tokenize(clean_expr)  # Разбиваем на токены (числа, операторы, функции)
-            rpn_queue = self._shunting_yard(tokens)  # Переводим в обратную польскую нотацию (RPN)
-            result = self._evaluate_rpn(rpn_queue)  # Вычисляем по RPN
-            # Ограничиваем значение по верхней/нижней границе и округляем
+            # Этапы: подготовка, токенизация, перевод в RPN, вычисление
+            clean_expr = self._prepare_expression(expr_str)
+            tokens     = self._tokenize(clean_expr)
+            rpn        = self._shunting_yard(tokens)
+            result     = self._evaluate_rpn(rpn)
+            # Ограничиваем масштаб чисел и делаем аккуратное округление
             if abs(result) > 1e-12 and abs(result) < 1e12:
                 result = round(result, 12)
-            self.ans = result  # Сохраняем последний результат в ans
+            self.ans = result    # Запоминаем результат для Ans
             return result
         except ZeroDivisionError:
             raise ValueError("Деление на ноль")
-        except (SyntaxError, IndexError, TypeError, ValueError) as e:
-            if "Неверный аргумент" in str(e):
-                raise ValueError("Неверный аргумент") from e
-            raise SyntaxError("Ошибка синтаксиса") from e
-        except Exception as e:
-            raise ValueError("Неизвестная ошибка") from e
+        except (SyntaxError, IndexError, TypeError, ValueError):
+            raise SyntaxError("Ошибка синтаксиса")
+        except Exception:
+            raise ValueError("Неизвестная ошибка")
 
-    # Подстановка ans, замены символов и явное умножение
     def _prepare_expression(self, expr: str) -> str:
+        """Приводит выражение к единому виду, делает замены символов, подставляет Ans"""
         expr = expr.lower().strip()
-        # Замена символов на имена функций и констант
+        # Ключевые замены для корректной парсировки: π → pi, факториалы, знаки и др.
         replacements = {
             'ans': str(self.ans), 'π': 'pi', 'ϕ': 'phi', '√': 'sqrt', '∛': 'cbrt',
-            '÷': '/', '×': '*', '∞': 'inf',
+            '÷': '/', '×': '*', '∞': 'inf'
         }
         for old, new in replacements.items():
             expr = expr.replace(old, new)
-        # n! -> fact(n)
+        # Замена факториала "n!" на "fact(n)"
         expr = re.sub(r'(\d+\.?\d*|\bpi\b|\be\b|\bphi\b|\([^\(\)]+\))!', r'fact(\1)', expr)
-        # Вставляем '*' между скобками и числами, функциями
-        expr = re.sub(r'(\d|\))(\()', r'\1*\2', expr)    # 2(3) -> 2*(3)
-        expr = re.sub(r'(\))(\d)', r'\1*\2', expr)       # )(3 -> )*3
-        expr = re.sub(r'(\d)([a-z(])', r'\1*\2', expr)   # 3sin( -> 3*sin(
-        expr = re.sub(r'(!|\))([a-z(])', r'\1*\2', expr) # )sin( -> )*sin(
+        # Неявное умножение: 2(3) -> 2*(3), pi(2) -> pi*(2), 2sin(30) -> 2*sin(30)
+        expr = re.sub(r'(\d|\))(\()', r'\1*\2', expr)
+        expr = re.sub(r'(\))(\d)', r'\1*\2', expr)
+        expr = re.sub(r'(\d)([a-z(])', r'\1*\2', expr)
+        expr = re.sub(r'(!|\))([a-z(])', r'\1*\2', expr)
         return expr
 
-    # Разбиение на токены (операторы, функции, числа и т.д.)
     def _tokenize(self, expr: str) -> list:
-        token_regex = re.compile(
-            r'([0-9]+\.?[0-9]*|[a-z_][a-z0-9_]*|[+\-*/^()]|,)'
-        )
+        """Разбивает строку на токены: числа, операторы, функции и т.д."""
+        token_regex = re.compile(r'([0-9]+\.?[0-9]*|[a-z_][a-z0-9_]*|[+\-*/^()]|,)')
         tokens = token_regex.findall(expr)
         output = []
-        # Обработка унарного минуса — превращается в умножение на -1
+        # Специально обрабатываем унарный минус (например, -5 или (-3))
         for i, token in enumerate(tokens):
             if token == '-' and (i == 0 or tokens[i-1] in self.operators or tokens[i-1] == '('):
                 output.extend(['-1', '*'])
@@ -138,20 +141,23 @@ class CalculatorLogic:
                 output.append(token)
         return output
 
-    # Преобразование в RPN по алгоритму Дейкстры (shunting-yard)
     def _shunting_yard(self, tokens: list) -> deque:
+        """Преобразует токены в обратную польскую нотацию (RPN) по алгоритму Дейкстры"""
         output_queue = deque()
         operator_stack = []
         for token in tokens:
+            # Обычные числа, константы идут сразу в выходную очередь
             if token.replace('.', '', 1).isdigit() or token in self.constants:
                 output_queue.append(token)
+            # Функции и операторы кладём на стек операций
             elif token in self.functions:
                 operator_stack.append(token)
             elif token == ',':
+                # Разделитель для функций с несколькими аргументами: пока не '(', выгружаем
                 while operator_stack and operator_stack[-1] != '(':
                     output_queue.append(operator_stack.pop())
             elif token in self.operators:
-                # Выгружаем операторы с большим/равным приоритетом
+                # Правило приоритета и ассоциативности операторов
                 while (operator_stack and operator_stack[-1] in self.operators and
                        ((self.operators[token]['assoc'] == 'L' and self.operators[token]['prec'] <= self.operators[operator_stack[-1]]['prec']) or
                         (self.operators[token]['assoc'] == 'R' and self.operators[token]['prec'] < self.operators[operator_stack[-1]]['prec']))):
@@ -160,13 +166,15 @@ class CalculatorLogic:
             elif token == '(':
                 operator_stack.append(token)
             elif token == ')':
-                # Выгружаем все операторы до открывающей скобки
+                # Выгружаем всё со стека до ближайшей открывающей скобки
                 while operator_stack and operator_stack[-1] != '(':
                     output_queue.append(operator_stack.pop())
                 if not operator_stack or operator_stack.pop() != '(':
                     raise SyntaxError("Несбалансированные скобки")
+                # После закрытия скобки функция (если была) тоже выгружается
                 if operator_stack and operator_stack[-1] in self.functions:
                     output_queue.append(operator_stack.pop())
+        # На выходной поток добавляем остатки со стека
         while operator_stack:
             op = operator_stack.pop()
             if op == '(':
@@ -174,34 +182,37 @@ class CalculatorLogic:
             output_queue.append(op)
         return output_queue
 
-    # Логика вычисления выражения, записанного в RPN
     def _evaluate_rpn(self, rpn_queue: deque):
+        """Вычисляет выражение в обратной польской нотации, возвращает float"""
         stack = []
         while rpn_queue:
             token = rpn_queue.popleft()
-            # Числа (в том числе отрицательные)
+            # Если это число (в том числе отрицательное) — кладём на стек
             if token.replace('.', '', 1).isdigit() or (token.startswith('-') and token[1:].replace('.','',1).isdigit()):
                 stack.append(float(token))
             elif token in self.constants:
                 stack.append(self.constants[token])
             elif token in self.operators:
+                # Для бинарных операторов снимаем два числа со стека
                 arg2 = stack.pop()
                 arg1 = stack.pop()
                 stack.append(self.operators[token]['func'](arg1, arg2))
             elif token in self.functions:
                 func = self.functions[token]
                 try:
-                    # Определяем, сколько аргументов требуется функции
+                    # Определяем количество необходимых аргументов для функции
                     sig = inspect.signature(func)
-                    arg_count = 0
-                    for p in sig.parameters.values():
-                        if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) and p.default == inspect._empty:
-                            arg_count += 1
-                    # Для функций с *args — забираем всё из стека!
+                    arg_count = sum(
+                        1 for p in sig.parameters.values()
+                        if (p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+                            and p.default == inspect._empty)
+                    )
+                    # Для функций с переменным числом аргументов (*args) — берём всё, что есть
                     if sig.parameters and any(p.kind == p.VAR_POSITIONAL for p in sig.parameters.values()):
                         arg_count = len(stack)
                 except Exception:
-                    arg_count = 1 # если не смогли определить —
+                    arg_count = 1
+                # Для min/max нужны строго два аргумента
                 if func in (min, max):
                     arg_count = 2
                 if func == self.functions['avg']:
@@ -214,38 +225,44 @@ class CalculatorLogic:
             raise SyntaxError("Ошибка в выражении")
         return stack[0]
 
-# Класс графического интерфейса
+# ===============================
+# Класс: графический интерфейс
+# ===============================
 class SciCalcGUI(tk.Tk):
     def __init__(self):
         super().__init__()
         self.logic = CalculatorLogic()
-        self.expression = ""  # строка текущего ввода
+        self.expression = ""                 # Текущая строка ввода (может быть частичная)
         self.title("Refactored ScienceCalc")
         self.configure(bg=BG_MAIN)
         self.resizable(False, False)
-        self.display_var = tk.StringVar()  # строка результата
-        self.expr_var = tk.StringVar()     # строка выражения
-        self.last_calc = False             # был ли только что произведён расчет
-        self.create_widgets()              # построение интерфейса
+        self.display_var = tk.StringVar()    # Текст главного поля (результат/ввод)
+        self.expr_var = tk.StringVar()       # Текст строки истории (верхняя строка)
+        self.last_calc = False               # Флаг: только что выполнено вычисление?
+        self._build_gui()                    # Создаём все элементы интерфейса
 
-    def create_widgets(self):
-        # Основной контейнер
+    def _build_gui(self):
+        """Создаёт все визуальные поля и кнопки калькулятора"""
         frame = tk.Frame(self, bg=BG_MAIN)
         frame.pack(expand=True, fill="both", padx=5, pady=5)
 
-        # Поле истории/выражения
-        expr_disp = tk.Entry(frame, textvariable=self.expr_var, font=EXPR_FONT,
-                             bg=BG_EXPR, fg=FG_EXPR, insertbackground=FG_EXPR,
-                             relief="flat", bd=1, justify="right", state='readonly')
+        # Верхнее поле: история и строка введённого выражения
+        expr_disp = tk.Entry(
+            frame, textvariable=self.expr_var, font=EXPR_FONT,
+            bg=BG_EXPR, fg=FG_EXPR, insertbackground=FG_EXPR,
+            relief="flat", bd=1, justify="right", state='readonly'
+        )
         expr_disp.grid(row=0, column=0, columnspan=8, sticky="nsew", padx=5, pady=(12, 1), ipady=2)
 
-        # Основное поле вывода результата
-        entry = tk.Entry(frame, textvariable=self.display_var, font=ENTRY_FONT,
-                         bg=BG_ENTRY, fg=FG_ENTRY, insertbackground=FG_ENTRY,
-                         relief="flat", bd=3, justify="right", state='readonly')
+        # Главное поле: результат и ввод (большими цифрами)
+        entry = tk.Entry(
+            frame, textvariable=self.display_var, font=ENTRY_FONT,
+            bg=BG_ENTRY, fg=FG_ENTRY, insertbackground=FG_ENTRY,
+            relief="flat", bd=3, justify="right", state='readonly'
+        )
         entry.grid(row=1, column=0, columnspan=8, sticky="nsew", padx=5, pady=(1, 10), ipady=10)
 
-        # Разметка кнопок: основной список всех кнопок и их типов (для цветовой схемы)
+        # Список всех кнопок по строкам; формат (название, тип-блока для оттенков)
         button_layout = [
             [('C', 'ctrl'), ('⌫', 'ctrl'), ('(', 'op'), (')', 'op'), ('π', 'fn'), ('e', 'fn'), ('ϕ', 'fn'), ('±', 'ctrl')],
             [('sin(', 'fn'), ('cos(', 'fn'), ('tan(', 'fn'), ('cot(', 'fn'), ('sec(', 'fn'), ('csc(', 'fn'), ('abs(', 'fn'), ('sign(', 'fn')],
@@ -257,56 +274,81 @@ class SciCalcGUI(tk.Tk):
             [('0', 'num'), ('.', 'num'), ('=', 'eq'), ('+', 'op')]
         ]
 
-        # Построение кнопок по сетке
+        # Построение каждой кнопки на сетке
         grid_row = 2
         for row_items in button_layout:
             grid_col = 0
-            # Определяем: последние строки — по 4 кнопки, остальные по 8 (ширина строчки)
+            # В последних двух строках кнопок меньше
             max_cols = 4 if grid_row >= 8 else 8
             for config in row_items:
                 if grid_col >= max_cols: continue
                 text, block = config[0], config[1]
-                self.create_styled_button(frame, text, block, grid_row, grid_col)
+                self._create_btn(frame, text, block, grid_row, grid_col)
                 grid_col += 1
             grid_row += 1
 
-    # Вспомогательная функция создания красивых кнопок
-    def create_styled_button(self, parent, text, block, row, col):
+    def _create_btn(self, parent, text, block, row, col):
+        """
+        Отрисовывает одну кнопку с нужной надписью, цветами и действием.
+        Для кнопки Rnd реализовано специальное поведение (см. insert_random_integer)
+        """
+        # Определяем цвет фона и текста в зависимости от типа кнопки
         bg_map = {'num': BTN_NUM_BG, 'op': BTN_OP_BG, 'fn': BTN_FN_BG, 'ctrl': BTN_CTRL_BG, 'eq': BTN_EQ_BG}
         fg_map = {'num': BTN_NUM_FG, 'op': BTN_OP_FG, 'fn': BTN_FN_FG, 'ctrl': BTN_CTRL_FG, 'eq': BTN_EQ_FG}
-        # Определяем действие для каждой кнопки
-        if text == 'C': cmd = self.clear
-        elif text == '⌫': cmd = self.backspace
-        elif text == '±': cmd = self.toggle_sign
-        elif text == 'Rnd': cmd = lambda: self.add_text(f"{random.random():.5f}")
-        elif text == '=': cmd = self.evaluate_expression
-        elif text == '√(': cmd = lambda: self.add_text('√(')
-        elif text == '∛(': cmd = lambda: self.add_text('∛(')
-        else: cmd = lambda t=text: self.add_text(t)
 
-        # Создаём прямоугольную область под кнопку
+        # Назначаем обработчик события для каждой кнопки
+        if text == 'C':       # Очистить всё
+            cmd = self.clear
+        elif text == '⌫':     # Удалить последний символ
+            cmd = self.backspace
+        elif text == '±':     # Переключение знака числа
+            cmd = self.toggle_sign
+        elif text == 'Rnd':   # Сгенерировать случайное целое число и стереть старое выражение
+            cmd = self.insert_random_integer
+        elif text == '=':     # Вычислить выражение
+            cmd = self.evaluate_expression
+        elif text == '√(':    # Добавить функцию корня
+            cmd = lambda: self.add_text('√(')
+        elif text == '∛(':    # Добавить функцию кубического корня
+            cmd = lambda: self.add_text('∛(')
+        else:                 # Для всех остальных — просто добавить текст на ввод
+            cmd = lambda t=text: self.add_text(t)
+
+        # Само графическое "тело" кнопки (градиентный прямоугольник + текст)
         canvas = tk.Canvas(parent, width=74, height=54, highlightthickness=0, bd=0, bg=parent['bg'])
         canvas.grid(row=row, column=col, padx=6, pady=8, sticky="ew")
 
-        # Цвета отрисовки кнопки
+        # Градиент и рамка
         border = BORDER_COLORS.get(block, '#62636b')
         color_top = TOP_COLORS.get(block, '#62636b')
-
-        # Рисуем "градиент" кнопки — верх и низ разного цвета
         canvas.create_rectangle(2, 2, 72, 52, outline=border, width=3, fill=color_top)
         canvas.create_rectangle(6, 28, 68, 52, outline='', fill=bg_map[block])
-        # Надпись на кнопке
+
+        # Текстовая часть кнопки
         canvas.create_text(37, 32, text=text, font=FONT, fill=fg_map[block])
-        # Привязываем обработчик клика
+        # Привязка события: нажатие кнопки вызывает соответствующую функцию
         canvas.bind("<Button-1>", lambda event: cmd())
 
-    # Добавить текст в текущее выражение (при нажатии кнопки)
+    def insert_random_integer(self):
+        """
+        Генерирует новое случайное целое число (от 0 до 9999) и ЗАМЕНЯЕТ им текущее выражение.
+        Любой предыдущий ввод стирается, поле ввода очищается.
+        Это реализует поведение генератора случайных чисел без десятичных знаков.
+        """
+        rand_int = random.randint(0, 9999)     # Формируем случайное ЦЕЛОЕ число
+        self.expression = str(rand_int)        # Сохраняем только это значение как текущее выражение
+        self.display_var.set(self.expression)  # Обновляем главное текстовое поле
+        self.expr_var.set("")                  # История ввода тоже сбрасывается
+        self.last_calc = False                 # После Rnd можно начинать новый ввод
+
     def add_text(self, value):
-        # Если выводилась ошибка — обнуляем всё
+        """
+        Добавляет текстовое значение (например, цифру/оператор/функцию) к текущему выражению.
+        Если только что была ошибка или расчёт — поле очищается для нового ввода.
+        """
         if str(self.display_var.get()).startswith("Ошибка"):
             self.expression = ""
             self.expr_var.set("")
-        # Если только что был расчет — начинаем новое выражение
         if self.last_calc:
             self.expression = ""
             self.display_var.set("")
@@ -315,23 +357,26 @@ class SciCalcGUI(tk.Tk):
         self.expression += value
         self.display_var.set(self.expression)
 
-    # Очистить выражение
     def clear(self):
+        """Очищает текущее выражение, историю и результат"""
         self.expression = ""
         self.expr_var.set("")
         self.display_var.set("")
         self.last_calc = False
 
-    # Удалить последний символ (по Backspace)
     def backspace(self):
+        """Удаляет последний символ из текущего выражения (реагирует на ошибку — очищает всё)"""
         if str(self.display_var.get()).startswith("Ошибка"):
             self.clear()
         else:
             self.expression = self.expression[:-1]
             self.display_var.set(self.expression)
 
-    # Переключение на отрицательное/положительное число
     def toggle_sign(self):
+        """
+        Меняет знак текущего выражения: (x) → (-(x)) и обратно.
+        Позволяет быстро получить отрицательную версию выражения/числа.
+        """
         if not self.expression: return
         if self.expression.startswith('-(') and self.expression.endswith(')'):
             self.expression = self.expression[2:-1]
@@ -339,30 +384,35 @@ class SciCalcGUI(tk.Tk):
             self.expression = f"-({self.expression})"
         self.display_var.set(self.expression)
 
-    # Вычислить выражение и показать результат
     def evaluate_expression(self):
+        """
+        Основной метод вычисления: обрабатывает введённое выражение,
+        отображает результат или ошибку, при необходимости оставляет его для дальнейших вычислений.
+        """
         if not self.expression: return
         try:
             orig = self.expression
             result = self.logic.evaluate(self.expression)
-            # Корректно выводим целое без .0, иначе — просто округлённое число
+            # Если результат — целое число, выводим без точки, иначе — округлённый float
             result_str = str(int(result)) if isinstance(result, float) and result.is_integer() else str(result)
             self.expr_var.set(orig)
             self.display_var.set(result_str)
-            self.expression = result_str  # Можно дальше считать с этим значением
+            self.expression = result_str
             self.last_calc = True
         except (ValueError, SyntaxError) as e:
             self.expr_var.set(self.expression)
             self.display_var.set(f"Ошибка: {e}")
             self.expression = ""
             self.last_calc = False
-        except Exception as e:
+        except Exception:
             self.expr_var.set(self.expression)
             self.display_var.set("Неизвестная ошибка")
             self.expression = ""
             self.last_calc = False
 
-# Запуск калькулятора
+# ===============================
+# Запуск приложения
+# ===============================
 if __name__ == "__main__":
     print("[DEBUG] Запуск приложения SciCalc...", file=sys.stderr)
     app = SciCalcGUI()
